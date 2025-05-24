@@ -24,15 +24,22 @@ async def doregister(
     print(Login, Password)
     with sqlite3.connect("users.db") as conn:
         cursor = conn.cursor()
-        cursor.execute("SELECT * FROM users ORDER BY id DESC LIMIT 1")
-        last_user = cursor.fetchone()
-
-        if last_user:
-            new_id = last_user[0] + 1
+        cursor.execute("SELECT * FROM users WHERE username = ?",
+                       (Login,))
+        if cursor.fetchone():
+            print("Пользователь с таким именем уже есть")
+            return RedirectResponse(url="/register", status_code=303)
         else:
-            new_id = 1
-        cursor.execute("INSERT INTO users (id, username, password) VALUES (?,?,?)", (new_id, Login, function.hash_password(Password)))
-    return RedirectResponse(url="/login", status_code=303)
+            cursor.execute("SELECT * FROM users ORDER BY id DESC LIMIT 1")
+            last_user = cursor.fetchone()
+
+            if last_user:
+                new_id = last_user[0] + 1
+            else:
+                new_id = 1
+            cursor.execute("INSERT INTO users (id, username, password) VALUES (?,?,?)",
+                           (new_id, Login, function.hash_password(Password)))
+            return RedirectResponse(url="/login", status_code=303)
 
 @app.get("/login", tags="Логин")
 async def login(request: Request):
@@ -64,7 +71,8 @@ async def dologin(
             redirect.set_cookie(key="username", value=function.encrypt(user[1]))
             return redirect
         else:
-            return RedirectResponse(url="/login")
+            print("Неверный логин или пароль")
+            return RedirectResponse(url="/login", status_code=303)
 
 @app.get("/", tags="Личный кабинет")
 async def main(request: Request):
@@ -111,9 +119,15 @@ async def doadd(
 ):
     with sqlite3.connect("users.db") as conn:
         cursor = conn.cursor()
-        cursor.execute("INSERT INTO passwords (user_id, name, username, password) VALUES (?,?,?,?)",
-                       (request.cookies.get("id"), name, username, function.encrypt(password)))
-    return RedirectResponse(url="/", status_code=303)
+        cursor.execute("SELECT * FROM passwords WHERE name = ? AND username = ?",
+                       (name, username))
+        if cursor.fetchone():
+            print("Такая запись уже есть")
+            return RedirectResponse(url="/add", status_code=303)
+        else:
+            cursor.execute("INSERT INTO passwords (user_id, name, username, password) VALUES (?,?,?,?)",
+                    (request.cookies.get("id"), name, username, function.encrypt(password)))
+            return RedirectResponse(url="/", status_code=303)
 
 if __name__ == "__main__":
     init.init_db()
