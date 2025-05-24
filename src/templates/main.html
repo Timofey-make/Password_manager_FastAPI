@@ -17,6 +17,7 @@
             <th>Сервис</th>
             <th>Логин</th>
             <th>Пароль</th>
+            <th>Действия</th>
         </tr>
 
         {% for note in notes %}
@@ -24,9 +25,20 @@
             <td>{{ note[0] }}</td>
             <td>{{ note[1] }}</td>
             <td>{{ note[2] }}</td>
+            <td>
+                <form action="/delete" method="post" style="display: inline;">
+                    <input type="hidden" name="name" value="{{ note[0] }}">
+                    <input type="hidden" name="username" value="{{ note[1] }}">
+                    <button type="submit" class="action-btn delete-btn"
+                            onclick="return confirm('Вы точно хотите удалить этот пароль?')">
+                        Удалить
+                    </button>
+                </form>
+            </td>
         </tr>
         {% endfor %}
     </table>
     <a href="/add">Добавить пароль</a>
+    <a href="/change">Изменить пароль</a>
 </body>
 </html>

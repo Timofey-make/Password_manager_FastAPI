@@ -129,6 +129,36 @@ async def doadd(
                     (request.cookies.get("id"), name, username, function.encrypt(password)))
             return RedirectResponse(url="/", status_code=303)
 
+@app.post("/delete", tags="Удалить пароль")
+async def delete_password(
+    request: Request,
+    name: str = Form(...),
+    username: str = Form(...)
+):
+    print(name, username)
+    with sqlite3.connect("users.db") as conn:
+        cursor = conn.cursor()
+        cursor.execute("DELETE FROM passwords WHERE name = ? AND username = ?",
+                       (name, username))
+    return RedirectResponse(url="/", status_code=303)
+
+@app.get("/change", tags="Изменть пароль")
+async def change(request: Request):
+    return templates.TemplateResponse("change-password.html", {"request": request})
+
+@app.post("/dochange", tags="Измеить пароль")
+async def dochange(
+    request: Request,
+    name: str = Form(...),
+    username: str = Form(...),
+    password: str = Form(...)
+):
+    with sqlite3.connect("users.db") as conn:
+        cursor = conn.cursor()
+        cursor.execute("""UPDATE passwords SET password = ?WHERE name = ? AND username = ?""",
+                       (function.encrypt(password), name, username))
+    return RedirectResponse(url="/", status_code=303)
+
 if __name__ == "__main__":
     init.init_db()
     uvicorn.run("main:app", reload=True)
