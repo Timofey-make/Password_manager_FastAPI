@@ -1,0 +1,32 @@
+<!DOCTYPE html>
+<html lang="ru">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <link rel="stylesheet" href="{{ url_for('static', path='/style.css') }}">
+    <title>Вход в систему</title>
+</head>
+<body>
+    <h1>Войти в систему</h1>
+    {% if error %}
+        <div class="error-message" style="color: red; margin-bottom: 15px;">
+            {{ error }}
+        </div>
+    {% endif %}
+    <form method="post" action="/dologin">
+        <div>
+            <label>Логин</label>
+            <input type="text" name="Login" required>
+        </div>
+        <div>
+            <label>Пароль</label>:</label>
+            <input type="text" name="Password" required>
+        </div>
+        <button type="submit">Войти</button>
+    </form>
+
+    <div>
+        <a href="/register">Регистрация</a>
+    </div>
+</body>
+</html>
