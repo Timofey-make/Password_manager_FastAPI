@@ -32,10 +32,14 @@ async def doregister(
         else:
             new_id = 1
         cursor.execute("INSERT INTO users (id, username, password) VALUES (?,?,?)", (new_id, Login, function.hash_password(Password)))
-    return RedirectResponse(url="/login")
+    return RedirectResponse(url="/login", status_code=303)
 
 @app.get("/login", tags="Логин")
 async def login(request: Request):
+    try:
+        print({"id":request.cookies.get("id"), "username":function.decrypt(request.cookies.get("username"))})
+    except:
+        print("Куки отчишены или вы не разу не заходили в аккаунт")
     return templates.TemplateResponse("login.html", {"request": request})
 
 @app.post("/dologin", tags="Логин")
@@ -64,8 +68,52 @@ async def dologin(
 
 @app.get("/", tags="Личный кабинет")
 async def main(request: Request):
-    return templates.TemplateResponse("main.html", {"request": request})
+    with sqlite3.connect("users.db") as conn:
+        cursor = conn.cursor()
+        cursor.execute("SELECT name, username, password FROM passwords WHERE user_id = ?",
+                       (request.cookies.get("id")))
+        encrypted_notes = cursor.fetchall()
+
+        notes = []
+        for note in encrypted_notes:
+            name, username, encrypted_password = note
+            try:
+                decrypted_password = function.decrypt(encrypted_password)
+            except:
+                decrypted_password = "Ошибка расшифровки"
+            notes.append((name, username, decrypted_password))
+    try:
+        print({"id":request.cookies.get("id"), "username":function.decrypt(request.cookies.get("username"))})
+    except:
+        print("Вы не в сессии")
+    return templates.TemplateResponse("main.html", {"request": request, "username":function.decrypt(request.cookies.get("username")), "notes":notes})
     # return {"id":request.cookies.get("id"), "username":function.decrypt(request.cookies.get("username"))}
+
+@app.get("/logout", tags="Выход")
+async def logout(request: Request):
+    # Создаем редирект-ответ
+    redirect = RedirectResponse(url="/login", status_code=303)
+    # Устанавливаем куки
+    redirect.delete_cookie(key="id")
+    redirect.delete_cookie(key="username")
+    return redirect
+
+@app.get("/add", tags="Добавить пароль")
+async def add(request: Request):
+    return templates.TemplateResponse("add_note.html", {"request": request})
+
+@app.post("/doadd", tags="Добавить пароль")
+async def doadd(
+    request: Request,
+    name: str = Form(...),
+    username: str = Form(...),
+    password: str = Form(...)
+):
+    with sqlite3.connect("users.db") as conn:
+        cursor = conn.cursor()
+        cursor.execute("INSERT INTO passwords (user_id, name, username, password) VALUES (?,?,?,?)",
+                       (request.cookies.get("id"), name, username, function.encrypt(password)))
+    return RedirectResponse(url="/", status_code=303)
 
 if __name__ == "__main__":
     init.init_db()

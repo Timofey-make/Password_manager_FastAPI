@@ -3,7 +3,7 @@
 <head>
     <meta charset="UTF-8">
     <title>Добавить пароль</title>
-    <link rel="stylesheet" href="{{ url_for('static', filename='style.css') }}">
+    <link rel="stylesheet" href="{{ url_for('static', path='/style.css') }}">
 </head>
 <body>
     <div class="login-button-container">
@@ -15,42 +15,24 @@
             {{ error }}
         </div>
     {% endif %}
-    <form method="POST" id="passwordForm">
-        {{ form.hidden_tag() }}
 
-        <div class="form-group">
-            {{ form.name.label }}
-            {{ form.name(id="serviceName") }}
+    <form method="post" action="/doadd">
+        <div>
+            <label>Сервис</label>
+            <input type="text" name="name" required>
         </div>
-
-        <div class="form-group">
-            {{ form.username.label }}
-            {{ form.username(id="serviceUsername") }}
+        <div>
+            <label>Логин</label>
+            <input type="text" name="username" required>
         </div>
-
-        <div class="form-group">
-            {{ form.password.label }}
-            <div style="display: flex; align-items: center; gap: 10px;">
-                {{ form.password(id="passwordField", style="flex-grow: 1;") }}
-                <button type="button" id="generateBtn" style="padding: 8px 15px;">Сгенерировать</button>
-            </div>
-            <div style="margin-top: 10px;">
-                <label>
-                    Длина:
-                    <input type="number" id="passLength" min="6" max="32" value="12" style="width: 50px;">
-                </label>
-                <label style="margin-left: 15px;">
-                    <input type="checkbox" id="includeSpecial"> Спецсимволы
-                </label>
-            </div>
+        <div>
+            <label>Пароль</label>
+            <input type="text" name="password" required>
         </div>
-
-        <div class="form-group">
-            {{ form.submit }}
-        </div>
+        <button type="submit">Добавить</button>
     </form>
 
-    <a href="{{ url_for('personal_main')}}">← Назад к списку</a>
+    <a href="/">← Назад к списку</a>
     <script>
         // Глобальный массив для слов
         let words = [];
