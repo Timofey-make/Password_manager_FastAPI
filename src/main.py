@@ -19,7 +19,7 @@ async def register(request: Request):
 async def doregister(
     request: Request,
     Login: str = Form(...),
-    Password: str = Form(...)
+    Password: str = Form(...),
 ):
     print(Login, Password)
     with sqlite3.connect("users.db") as conn:
@@ -27,8 +27,8 @@ async def doregister(
         cursor.execute("SELECT * FROM users WHERE username = ?",
                        (Login,))
         if cursor.fetchone():
-            print("Пользователь с таким именем уже есть")
-            return RedirectResponse(url="/register", status_code=303)
+            error_msg = "Пользователь с таким именем уже есть"
+            return RedirectResponse(url="/register")
         else:
             cursor.execute("SELECT * FROM users ORDER BY id DESC LIMIT 1")
             last_user = cursor.fetchone()
@@ -79,21 +79,21 @@ async def main(request: Request):
     with sqlite3.connect("users.db") as conn:
         cursor = conn.cursor()
         cursor.execute("SELECT name, username, password FROM passwords WHERE user_id = ?",
-                       (request.cookies.get("id")))
+                       (request.cookies.get("id"),))
         encrypted_notes = cursor.fetchall()
 
-        notes = []
-        for note in encrypted_notes:
-            name, username, encrypted_password = note
-            try:
-                decrypted_password = function.decrypt(encrypted_password)
-            except:
-                decrypted_password = "Ошибка расшифровки"
-            notes.append((name, username, decrypted_password))
-    try:
-        print({"id":request.cookies.get("id"), "username":function.decrypt(request.cookies.get("username"))})
-    except:
-        print("Вы не в сессии")
+        if request.cookies.get("id"):
+            notes = []
+            for note in encrypted_notes:
+                name, username, encrypted_password = note
+                try:
+                    decrypted_password = function.decrypt(encrypted_password)
+                except:
+                    decrypted_password = "Ошибка расшифровки"
+                notes.append((name, username, decrypted_password))
+        else:
+            return RedirectResponse(url="/login", status_code=303)
+
     return templates.TemplateResponse("main.html", {"request": request, "username":function.decrypt(request.cookies.get("username")), "notes":notes})
     # return {"id":request.cookies.get("id"), "username":function.decrypt(request.cookies.get("username"))}
 
@@ -108,7 +108,14 @@ async def logout(request: Request):
 
 @app.get("/add", tags="Добавить пароль")
 async def add(request: Request):
-    return templates.TemplateResponse("add_note.html", {"request": request})
+    with sqlite3.connect("users.db") as conn:
+        cursor = conn.cursor()
+        cursor.execute("SELECT * FROM users WHERE id = ?",
+                       (request.cookies.get("id"),))
+        if cursor.fetchone():
+            return templates.TemplateResponse("add_note.html", {"request": request})
+        else:
+            return RedirectResponse(url="/login", status_code=303)
 
 @app.post("/doadd", tags="Добавить пароль")
 async def doadd(
@@ -144,7 +151,14 @@ async def delete_password(
 
 @app.get("/change", tags="Изменть пароль")
 async def change(request: Request):
-    return templates.TemplateResponse("change-password.html", {"request": request})
+    with sqlite3.connect("users.db") as conn:
+        cursor = conn.cursor()
+        cursor.execute("SELECT * FROM users WHERE id = ?",
+                       (request.cookies.get("id"),))
+        if cursor.fetchone():
+            return templates.TemplateResponse("change-password.html", {"request": request})
+        else:
+            return RedirectResponse(url="/login", status_code=303)
 
 @app.post("/dochange", tags="Измеить пароль")
 async def dochange(
@@ -158,6 +172,90 @@ async def dochange(
         cursor.execute("""UPDATE passwords SET password = ?WHERE name = ? AND username = ?""",
                        (function.encrypt(password), name, username))
     return RedirectResponse(url="/", status_code=303)
+
+@app.get("/share", tags="Шэйринг паролей")
+async def share(request: Request):
+    with sqlite3.connect("users.db") as conn:
+        cursor = conn.cursor()
+        cursor.execute("SELECT * FROM users WHERE id = ?",
+                       (request.cookies.get("id"),))
+        if cursor.fetchone():
+            return templates.TemplateResponse("share-password.html", {"request": request})
+        else:
+            return RedirectResponse(url="/login", status_code=303)
+
+@app.post("/doshare", tags=["Шэйринг пролей"])
+async def doshare(
+        request: Request,
+        login: str = Form(...),  # Логин получателя (например "Милана")
+        name: str = Form(...),  # Название сервиса
+        username: str = Form(...),  # Логин для сервиса
+        password: str = Form(...)  # Пароль для сервиса
+):
+    try:
+        with sqlite3.connect("users.db") as conn:
+            cursor = conn.cursor()
+
+            # 1. Получаем username отправителя из куков (расшифровываем)
+            sender_username = function.decrypt(request.cookies.get("username"))
+            if not sender_username:
+                return RedirectResponse(url="/login", status_code=303)
+
+            # 2. Получаем ID получателя по его username
+            cursor.execute("SELECT id FROM users WHERE username = ?", (login,))
+            recipient = cursor.fetchone()
+            if not recipient:
+                return RedirectResponse(url="/?error=user_not_found", status_code=303)
+
+            recipient_id = recipient[0]  # ID получателя
+
+            # 3. Проверяем, что отправитель владеет этим паролем
+            cursor.execute("""
+                SELECT 1 FROM passwords 
+                WHERE name = ? AND username = ? AND password = ? AND user_id = ?
+                """,
+                           (name, username, function.encrypt(password),
+                            request.cookies.get("id")))  # ID отправителя из куков
+
+            if not cursor.fetchone():
+                return RedirectResponse(url="/?error=password_not_owned", status_code=303)
+
+            # 4. Добавляем запись в таблицу share
+            cursor.execute("""
+                INSERT INTO share (ownername, sendername, name, username, password) 
+                VALUES (?, ?, ?, ?, ?)
+                """,
+                           (recipient_id, sender_username, name, username,
+                            function.encrypt(password)))
+
+            conn.commit()
+            return RedirectResponse(url="/?success=shared", status_code=303)
+
+    except Exception as e:
+        print(f"Ошибка: {str(e)}")
+        return RedirectResponse(url="/?error=server_error", status_code=303)
+
+@app.get("/view", tags="Личный кабинет")
+async def view(request:Request):
+    with sqlite3.connect("users.db") as conn:
+        cursor = conn.cursor()
+        cursor.execute("SELECT sendername, name, username, password FROM share WHERE ownername = ?",
+                       (request.cookies.get("id"),))
+        encrypted_notes = cursor.fetchall()
+
+        if request.cookies.get("id"):
+            notes = []
+            for note in encrypted_notes:
+                sendername, name, username, encrypted_password = note
+                try:
+                    decrypted_password = function.decrypt(encrypted_password)
+                except:
+                    decrypted_password = "Ошибка расшифровки"
+                notes.append((sendername, name, username, decrypted_password))
+        else:
+            return RedirectResponse(url="/login", status_code=303)
+
+    return templates.TemplateResponse("view-password.html", {"request": request, "username":function.decrypt(request.cookies.get("username")), "notes":notes})
 
 if __name__ == "__main__":
     init.init_db()

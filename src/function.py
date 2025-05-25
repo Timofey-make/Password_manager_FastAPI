@@ -15,8 +15,9 @@ def encrypt(text):
 
 # декодирование пароля
 def decrypt(encrypted_text):
+    if not encrypted_text:
+        return "Нельзя расшифровать None или пустую строку"
     return base64.b64decode(encrypted_text.encode()).decode()
-
 
 # генератор паролей
 def generator_password(length, myword):

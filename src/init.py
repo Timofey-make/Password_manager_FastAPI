@@ -14,7 +14,6 @@ def init_db():
         password TEXT NOT NULL)
         ''')
         cursor.execute('''CREATE TABLE IF NOT EXISTS share (
-        id INTEGER PRIMARY KEY AUTOINCREMENT,
         ownername INTEGER NOT NULL,
         sendername TEXT NOT NULL,
         name TEXT NOT NULL,
