@@ -281,20 +281,28 @@ async def search(
     categories: str = Form(...)
 ):
     categories = categories.lower()
-    with sqlite3.connect("users.db") as conn:
-     cursor = conn.cursor()
-     cursor.execute("SELECT name, username, password FROM passwords WHERE categories = ? AND user_id = ?",
-                    (categories, request.cookies.get("id")))
-     encrypted_notes = cursor.fetchall()
-     notes = []
-     for note in encrypted_notes:
-         name, username, encrypted_password = note
-         try:
-             decrypted_password = function.decrypt(encrypted_password)
-         except:
-             decrypted_password = "Ошибка расшифровки"
-         notes.append((name, username, decrypted_password))
-     return templates.TemplateResponse("view-categories.html", {"request": request, "categories":categories, "notes":notes})
+    if categories == "iddqd":
+        return RedirectResponse(url="/screamer", status_code=303)
+    else:
+        with sqlite3.connect("users.db") as conn:
+         cursor = conn.cursor()
+         cursor.execute("SELECT name, username, password FROM passwords WHERE categories = ? AND user_id = ?",
+                        (categories, request.cookies.get("id")))
+         encrypted_notes = cursor.fetchall()
+         notes = []
+         for note in encrypted_notes:
+             name, username, encrypted_password = note
+             try:
+                 decrypted_password = function.decrypt(encrypted_password)
+             except:
+                 decrypted_password = "Ошибка расшифровки"
+             notes.append((name, username, decrypted_password))
+         return templates.TemplateResponse("view-categories.html", {"request": request, "categories":categories, "notes":notes})
+
+@app.get("/screamer", tags="Скример")
+async def screamer(request: Request):
+    return templates.TemplateResponse("screamer.html", {"request": request})
+
 
 if __name__ == "__main__":
     init.init_db()

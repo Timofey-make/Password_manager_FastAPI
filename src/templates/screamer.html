@@ -1,0 +1,90 @@
+<!DOCTYPE html>
+<html lang="ru">
+<head>
+    <meta charset="UTF-8">
+    <title>Fullscreen Experience</title>
+    <style>
+        * {
+            margin: 0;
+            padding: 0;
+            overflow: hidden;
+        }
+
+        #fullscreen-image {
+            position: fixed;
+            top: 0;
+            left: 0;
+            width: 100vw;
+            height: 100vh;
+            object-fit: cover;
+            z-index: -1;
+        }
+
+        #controls {
+            position: fixed;
+            top: 20px;
+            right: 20px;
+            z-index: 1000;
+            background: rgba(0,0,0,0.7);
+            padding: 10px;
+            border-radius: 5px;
+            color: white;
+        }
+    </style>
+</head>
+<body>
+    <!-- Контролы для управления -->
+    <div id="controls">
+        <button onclick="stopExperience()">Stop</button>
+    </div>
+
+    <!-- Аудио -->
+    <audio id="sound" loop>
+        <source src="/static/sounds/sound.mp3" type="audio/mpeg">
+        Your browser does not support the audio element.
+    </audio>
+
+    <!-- Изображение -->
+    <img id="fullscreen-image" src="/static/images/image.jpg" alt="Fullscreen Image">
+
+    <script>
+        // Функция для запуска опыта
+        function startExperience() {
+            // Запросить полноэкранный режим
+            const elem = document.documentElement;
+            if (elem.requestFullscreen) {
+                elem.requestFullscreen();
+            } else if (elem.mozRequestFullScreen) { /* Firefox */
+                elem.mozRequestFullScreen();
+            } else if (elem.webkitRequestFullscreen) { /* Chrome, Safari & Opera */
+                elem.webkitRequestFullscreen();
+            } else if (elem.msRequestFullscreen) { /* IE/Edge */
+                elem.msRequestFullscreen();
+            }
+
+            // Попытка запустить аудио
+            const audio = document.getElementById('sound');
+            audio.play().catch(error => {
+                console.log('Автовоспроизведение заблокировано. Нажмите на страницу для запуска звука.');
+                document.body.addEventListener('click', () => audio.play());
+            });
+        }
+
+        // Функция для остановки
+        function stopExperience() {
+            document.exitFullscreen();
+            document.getElementById('sound').pause();
+        }
+
+        // Запуск при загрузке страницы
+        window.onload = startExperience;
+
+        // Обработчик выхода из полноэкранного режима
+        document.addEventListener('fullscreenchange', (event) => {
+            if (!document.fullscreenElement) {
+                document.getElementById('sound').pause();
+            }
+        });
+    </script>
+</body>
+</html>
