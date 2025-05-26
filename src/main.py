@@ -39,14 +39,15 @@ async def doregister(
                 new_id = 1
             cursor.execute("INSERT INTO users (id, username, password) VALUES (?,?,?)",
                            (new_id, Login, function.hash_password(Password)))
-            return RedirectResponse(url="/login", status_code=303)
+            # Создаем редирект-ответ
+            redirect = RedirectResponse(url="/", status_code=303)
+            # Устанавливаем куки
+            redirect.set_cookie(key="id", value=str(new_id))
+            redirect.set_cookie(key="username", value=function.encrypt(Login))
+            return redirect
 
 @app.get("/login", tags="Логин")
 async def login(request: Request):
-    try:
-        print({"id":request.cookies.get("id"), "username":function.decrypt(request.cookies.get("username"))})
-    except:
-        print("Куки отчишены или вы не разу не заходили в аккаунт")
     return templates.TemplateResponse("login.html", {"request": request})
 
 @app.post("/dologin", tags="Логин")
@@ -135,7 +136,7 @@ async def doadd(
             return RedirectResponse(url="/add", status_code=303)
         else:
             cursor.execute("INSERT INTO passwords (categories, user_id, name, username, password) VALUES (?,?,?,?,?)",
-                    (categories, request.cookies.get("id"), name, username, function.encrypt(password)))
+                    (categories.lower(), request.cookies.get("id"), name, username, function.encrypt(password)))
             return RedirectResponse(url="/", status_code=303)
 
 @app.post("/delete", tags="Удалить пароль")
@@ -149,8 +150,8 @@ async def delete_password(
         cursor = conn.cursor()
         cursor.execute("DELETE FROM passwords WHERE name = ? AND username = ?",
                        (name, username))
-        cursor.execute("DELETE FROM share WHERE ownername = ? AND name = ? AND username = ?",
-                       (request.cookies.get("id"), name, username))
+        cursor.execute("DELETE FROM share WHERE sendername = ? AND name = ? AND username = ?",
+                       (request.cookies.get("username"), name, username))
     return RedirectResponse(url="/", status_code=303)
 
 @app.post("/delete-share", tags="Удалить пароль")
@@ -272,7 +273,6 @@ async def view(request:Request):
                 notes.append((sendername, name, username, decrypted_password))
         else:
             return RedirectResponse(url="/login", status_code=303)
-
     return templates.TemplateResponse("view-password.html", {"request": request, "username":function.decrypt(request.cookies.get("username")), "notes":notes})
 
 @app.post("/search", tags="Поиск по тегу")
@@ -280,22 +280,21 @@ async def search(
     request:Request,
     categories: str = Form(...)
 ):
-     with sqlite3.connect("users.db") as conn:
-         cursor = conn.cursor()
-         cursor.execute("SELECT name, username, password FROM passwords WHERE categories = ? AND user_id = ?",
-                        (categories, request.cookies.get("id")))
-         encrypted_notes = cursor.fetchall()
-
-         print(categories, encrypted_notes)
-         notes = []
-         for note in encrypted_notes:
-             name, username, encrypted_password = note
-             try:
-                 decrypted_password = function.decrypt(encrypted_password)
-             except:
-                 decrypted_password = "Ошибка расшифровки"
-             notes.append((name, username, decrypted_password))
-         return templates.TemplateResponse("view-categories.html", {"request": request, "categories":categories, "notes":notes})
+    categories = categories.lower()
+    with sqlite3.connect("users.db") as conn:
+     cursor = conn.cursor()
+     cursor.execute("SELECT name, username, password FROM passwords WHERE categories = ? AND user_id = ?",
+                    (categories, request.cookies.get("id")))
+     encrypted_notes = cursor.fetchall()
+     notes = []
+     for note in encrypted_notes:
+         name, username, encrypted_password = note
+         try:
+             decrypted_password = function.decrypt(encrypted_password)
+         except:
+             decrypted_password = "Ошибка расшифровки"
+         notes.append((name, username, decrypted_password))
+     return templates.TemplateResponse("view-categories.html", {"request": request, "categories":categories, "notes":notes})
 
 if __name__ == "__main__":
     init.init_db()
