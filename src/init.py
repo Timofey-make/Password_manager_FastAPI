@@ -8,6 +8,7 @@ def init_db():
         username TEXT UNIQUE NOT NULL,
         password TEXT NOT NULL)''')
         cursor.execute('''CREATE TABLE IF NOT EXISTS passwords (
+        categories TEXT,
         user_id INTEGER NOT NULL,
         name TEXT NOT NULL,
         username TEXT NOT NULL,

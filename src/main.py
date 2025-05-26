@@ -120,10 +120,12 @@ async def add(request: Request):
 @app.post("/doadd", tags="Добавить пароль")
 async def doadd(
     request: Request,
+    categories: str = Form(...),
     name: str = Form(...),
     username: str = Form(...),
     password: str = Form(...)
 ):
+    print(categories)
     with sqlite3.connect("users.db") as conn:
         cursor = conn.cursor()
         cursor.execute("SELECT * FROM passwords WHERE name = ? AND username = ?",
@@ -132,8 +134,8 @@ async def doadd(
             print("Такая запись уже есть")
             return RedirectResponse(url="/add", status_code=303)
         else:
-            cursor.execute("INSERT INTO passwords (user_id, name, username, password) VALUES (?,?,?,?)",
-                    (request.cookies.get("id"), name, username, function.encrypt(password)))
+            cursor.execute("INSERT INTO passwords (categories, user_id, name, username, password) VALUES (?,?,?,?,?)",
+                    (categories, request.cookies.get("id"), name, username, function.encrypt(password)))
             return RedirectResponse(url="/", status_code=303)
 
 @app.post("/delete", tags="Удалить пароль")
@@ -147,6 +149,8 @@ async def delete_password(
         cursor = conn.cursor()
         cursor.execute("DELETE FROM passwords WHERE name = ? AND username = ?",
                        (name, username))
+        cursor.execute("DELETE FROM share WHERE ownername = ? AND name = ? AND username = ?",
+                       (request.cookies.get("id"), name, username))
     return RedirectResponse(url="/", status_code=303)
 
 @app.post("/delete-share", tags="Удалить пароль")
@@ -163,7 +167,7 @@ async def delete_share(
                        (sendername, name, username))
     return RedirectResponse(url="/view", status_code=303)
 
-@app.get("/change", tags="Изменть пароль")
+@app.get("/change", tags="Изменить пароль")
 async def change(request: Request):
     with sqlite3.connect("users.db") as conn:
         cursor = conn.cursor()
@@ -174,7 +178,7 @@ async def change(request: Request):
         else:
             return RedirectResponse(url="/login", status_code=303)
 
-@app.post("/dochange", tags="Измеить пароль")
+@app.post("/dochange", tags="Изменить пароль")
 async def dochange(
     request: Request,
     name: str = Form(...),
@@ -270,6 +274,28 @@ async def view(request:Request):
             return RedirectResponse(url="/login", status_code=303)
 
     return templates.TemplateResponse("view-password.html", {"request": request, "username":function.decrypt(request.cookies.get("username")), "notes":notes})
+
+@app.post("/search", tags="Поиск по тегу")
+async def search(
+    request:Request,
+    categories: str = Form(...)
+):
+     with sqlite3.connect("users.db") as conn:
+         cursor = conn.cursor()
+         cursor.execute("SELECT name, username, password FROM passwords WHERE categories = ? AND user_id = ?",
+                        (categories, request.cookies.get("id")))
+         encrypted_notes = cursor.fetchall()
+
+         print(categories, encrypted_notes)
+         notes = []
+         for note in encrypted_notes:
+             name, username, encrypted_password = note
+             try:
+                 decrypted_password = function.decrypt(encrypted_password)
+             except:
+                 decrypted_password = "Ошибка расшифровки"
+             notes.append((name, username, decrypted_password))
+         return templates.TemplateResponse("view-categories.html", {"request": request, "categories":categories, "notes":notes})
 
 if __name__ == "__main__":
     init.init_db()
