@@ -149,6 +149,20 @@ async def delete_password(
                        (name, username))
     return RedirectResponse(url="/", status_code=303)
 
+@app.post("/delete-share", tags="Удалить пароль")
+async def delete_share(
+    request: Request,
+    sendername: str = Form(...),
+    name: str = Form(...),
+    username: str = Form(...)
+):
+    print(sendername, name, username)
+    with sqlite3.connect("users.db") as conn:
+        cursor = conn.cursor()
+        cursor.execute("DELETE FROM share WHERE sendername = ? AND name = ? AND username = ?",
+                       (sendername, name, username))
+    return RedirectResponse(url="/view", status_code=303)
+
 @app.get("/change", tags="Изменть пароль")
 async def change(request: Request):
     with sqlite3.connect("users.db") as conn:
