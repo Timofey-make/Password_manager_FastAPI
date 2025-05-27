@@ -26,14 +26,16 @@
             <td>{{ note[1] }}</td>
             <td>{{ note[2] }}</td>
             <td>
-                <form action="/delete" method="post" style="display: inline;">
-                    <input type="hidden" name="name" value="{{ note[0] }}">
-                    <input type="hidden" name="username" value="{{ note[1] }}">
-                    <button type="submit" class="action-btn delete-btn"
-                            onclick="return confirm('Вы точно хотите удалить этот пароль?')">
-                        Удалить
-                    </button>
-                </form>
+                <a href="/delete?name={{ note[0] | urlencode }}&username={{ note[1] | urlencode }}"
+                   class="action-btn delete-btn"
+                   onclick="return confirm('Вы уверены, что хотите удалить этот пароль?')">
+                    Удалить
+                </a>
+                <a href="/share?name={{ note[0] | urlencode }}&username={{ note[1] | urlencode }}"
+                   class="action-btn share-btn"
+                   onclick="return confirm('Вы уверены, что хотите поделиться этим паролем?')">
+                    Поделиться
+                </a>
             </td>
         </tr>
         {% endfor %}

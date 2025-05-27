@@ -139,11 +139,11 @@ async def doadd(
                     (categories.lower(), request.cookies.get("id"), name, username, function.encrypt(password)))
             return RedirectResponse(url="/", status_code=303)
 
-@app.post("/delete", tags="Удалить пароль")
+@app.get("/delete", tags="Удалить пароль")
 async def delete_password(
+    name: str,
+    username: str,
     request: Request,
-    name: str = Form(...),
-    username: str = Form(...)
 ):
     print(name, username)
     with sqlite3.connect("users.db") as conn:
@@ -151,7 +151,7 @@ async def delete_password(
         cursor.execute("DELETE FROM passwords WHERE name = ? AND username = ?",
                        (name, username))
         cursor.execute("DELETE FROM share WHERE sendername = ? AND name = ? AND username = ?",
-                       (request.cookies.get("username"), name, username))
+                       (function.decrypt(request.cookies.get("username")), name, username))
     return RedirectResponse(url="/", status_code=303)
 
 @app.post("/delete-share", tags="Удалить пароль")
@@ -164,8 +164,8 @@ async def delete_share(
     print(sendername, name, username)
     with sqlite3.connect("users.db") as conn:
         cursor = conn.cursor()
-        cursor.execute("DELETE FROM share WHERE sendername = ? AND name = ? AND username = ?",
-                       (sendername, name, username))
+        cursor.execute("DELETE FROM share WHERE ownername = ? AND sendername = ? AND name = ? AND username = ?",
+                       (request.cookies.get("id"), sendername, name, username))
     return RedirectResponse(url="/view", status_code=303)
 
 @app.get("/change", tags="Изменить пароль")
@@ -192,69 +192,105 @@ async def dochange(
                        (function.encrypt(password), name, username))
     return RedirectResponse(url="/", status_code=303)
 
-@app.get("/share", tags="Шэйринг паролей")
-async def share(request: Request):
-    with sqlite3.connect("users.db") as conn:
-        cursor = conn.cursor()
-        cursor.execute("SELECT * FROM users WHERE id = ?",
-                       (request.cookies.get("id"),))
-        if cursor.fetchone():
-            return templates.TemplateResponse("share-password.html", {"request": request})
-        else:
-            return RedirectResponse(url="/login", status_code=303)
+@app.get("/share", tags=["Шэйринг паролей"])
+async def share(
+        name: str,
+        username: str,
+        request: Request
+):
+    """Обработчик страницы для общего доступа к паролю"""
+    if not request.cookies.get("id"):
+        return RedirectResponse(url="/login", status_code=303)
+
+    return templates.TemplateResponse(
+        "share-password.html",
+        {
+            "request": request,
+            "name": name,
+            "username": username
+        }
+    )
 
 @app.post("/doshare", tags=["Шэйринг пролей"])
 async def doshare(
         request: Request,
-        login: str = Form(...),  # Логин получателя (например "Милана")
-        name: str = Form(...),  # Название сервиса
-        username: str = Form(...),  # Логин для сервиса
-        password: str = Form(...)  # Пароль для сервиса
+        login: str = Form(...),
+        name: str = Form(...),
+        username: str = Form(...),
+        password: str = Form(...)
 ):
+    """Обработчик общего доступа к паролю"""
     try:
+        # Получаем данные пользователя
+        user_id = int(request.cookies.get("id"))
+        sender_username = function.decrypt(request.cookies.get("username"))
+
+        # Логирование для отладки
+        print(f"Attempting share by user {user_id} ({sender_username})")
+        print(f"Target service: {name}, login: {username}")
+        print(f"Received password: {password}")
+
         with sqlite3.connect("users.db") as conn:
             cursor = conn.cursor()
 
-            # 1. Получаем username отправителя из куков (расшифровываем)
-            sender_username = function.decrypt(request.cookies.get("username"))
-            if not sender_username:
-                return RedirectResponse(url="/login", status_code=303)
-
-            # 2. Получаем ID получателя по его username
+            # Проверка получателя
             cursor.execute("SELECT id FROM users WHERE username = ?", (login,))
             recipient = cursor.fetchone()
             if not recipient:
+                print(f"Recipient {login} not found")
                 return RedirectResponse(url="/?error=user_not_found", status_code=303)
 
-            recipient_id = recipient[0]  # ID получателя
-
-            # 3. Проверяем, что отправитель владеет этим паролем
+            # Получаем оригинальный пароль
             cursor.execute("""
-                SELECT 1 FROM passwords 
-                WHERE name = ? AND username = ? AND password = ? AND user_id = ?
+                SELECT password 
+                FROM passwords 
+                WHERE name = ? 
+                AND username = ? 
+                AND user_id = ?
                 """,
-                           (name, username, function.encrypt(password),
-                            request.cookies.get("id")))  # ID отправителя из куков
+                           (name, username, user_id)
+                           )
+            db_record = cursor.fetchone()
 
-            if not cursor.fetchone():
+            if not db_record:
+                print("Password record not found in database")
                 return RedirectResponse(url="/?error=password_not_owned", status_code=303)
 
-            # 4. Добавляем запись в таблицу share
+            # Дешифруем и сравниваем пароли
+            decrypted_password = function.decrypt(db_record[0])
+            print(f"Decrypted password from DB: {decrypted_password}")
+
+            if password != decrypted_password:
+                print("Password mismatch!")
+                return RedirectResponse(url="/?error=password_not_owned", status_code=303)
+
+            # Шифруем пароль для хранения
+            encrypted_for_storage = function.encrypt(password)
+
+            # Сохраняем общий доступ
             cursor.execute("""
-                INSERT INTO share (ownername, sendername, name, username, password) 
+                INSERT INTO share (ownername, sendername, name, username, password)
                 VALUES (?, ?, ?, ?, ?)
                 """,
-                           (recipient_id, sender_username, name, username,
-                            function.encrypt(password)))
-
+                           (
+                               recipient[0],  # ID получателя
+                               sender_username,  # Имя отправителя
+                               name,  # Название сервиса
+                               username,  # Логин для сервиса
+                               encrypted_for_storage  # Зашифрованный пароль
+                           )
+                           )
             conn.commit()
+            print("Sharing successful!")
             return RedirectResponse(url="/?success=shared", status_code=303)
 
+    except ValueError as ve:
+        print(f"Value error: {str(ve)}")
+        return RedirectResponse(url="/?error=invalid_request", status_code=303)
     except Exception as e:
-        print(f"Ошибка: {str(e)}")
+        print(f"Critical error: {str(e)}")
         return RedirectResponse(url="/?error=server_error", status_code=303)
 
-@app.get("/view", tags="Личный кабинет")
 async def view(request:Request):
     with sqlite3.connect("users.db") as conn:
         cursor = conn.cursor()
