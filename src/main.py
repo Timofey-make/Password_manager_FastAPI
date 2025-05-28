@@ -2,6 +2,7 @@ from fastapi import FastAPI, Request, Form, Response, requests
 from fastapi.responses import HTMLResponse, RedirectResponse
 from fastapi.staticfiles import StaticFiles
 from fastapi.templating import Jinja2Templates
+from urllib.parse import unquote
 import function
 import sqlite3
 import uvicorn
@@ -219,78 +220,66 @@ async def doshare(
         username: str = Form(...),
         password: str = Form(...)
 ):
-    """Обработчик общего доступа к паролю"""
-    try:
-        # Получаем данные пользователя
-        user_id = int(request.cookies.get("id"))
-        sender_username = function.decrypt(request.cookies.get("username"))
+    with sqlite3.connect("users.db") as conn:
+        cursor = conn.cursor()
+        user_id = request.cookies.get("id")
+        login = unquote(login)
+        username = unquote(username)
+        name = unquote(name)
+        password = unquote(password)
+        print(user_id, login, name, username, password)
 
-        # Логирование для отладки
-        print(f"Attempting share by user {user_id} ({sender_username})")
-        print(f"Target service: {name}, login: {username}")
-        print(f"Received password: {password}")
-
-        with sqlite3.connect("users.db") as conn:
-            cursor = conn.cursor()
-
-            # Проверка получателя
-            cursor.execute("SELECT id FROM users WHERE username = ?", (login,))
-            recipient = cursor.fetchone()
-            if not recipient:
-                print(f"Recipient {login} not found")
-                return RedirectResponse(url="/?error=user_not_found", status_code=303)
-
-            # Получаем оригинальный пароль
-            cursor.execute("""
-                SELECT password 
-                FROM passwords 
-                WHERE name = ? 
+        # Ищем пароль в базе
+        cursor.execute("""
+            SELECT password 
+            FROM passwords 
+            WHERE name = ? 
                 AND username = ? 
                 AND user_id = ?
-                """,
-                           (name, username, user_id)
-                           )
-            db_record = cursor.fetchone()
+        """, (name, username, user_id))
 
-            if not db_record:
-                print("Password record not found in database")
-                return RedirectResponse(url="/?error=password_not_owned", status_code=303)
+        true_password = cursor.fetchone()
+        print(true_password[0])
 
-            # Дешифруем и сравниваем пароли
-            decrypted_password = function.decrypt(db_record[0])
-            print(f"Decrypted password from DB: {decrypted_password}")
+        if true_password is None:
+            print("Пароль не существует или вы им не владеете")
+            return RedirectResponse(url="/", status_code=303)
 
-            if password != decrypted_password:
-                print("Password mismatch!")
-                return RedirectResponse(url="/?error=password_not_owned", status_code=303)
+        if true_password[0] == function.encrypt(password):
+            cursor.execute("SELECT id FROM users WHERE username = ?", (login,))
+            recipient = cursor.fetchone()
 
-            # Шифруем пароль для хранения
-            encrypted_for_storage = function.encrypt(password)
+            if recipient is None:
+                print("Получатель не найден")
+                return RedirectResponse(url="/", status_code=303)
 
-            # Сохраняем общий доступ
+            sender_username = function.decrypt(request.cookies.get("username"))
+
             cursor.execute("""
-                INSERT INTO share (ownername, sendername, name, username, password)
-                VALUES (?, ?, ?, ?, ?)
-                """,
-                           (
-                               recipient[0],  # ID получателя
-                               sender_username,  # Имя отправителя
-                               name,  # Название сервиса
-                               username,  # Логин для сервиса
-                               encrypted_for_storage  # Зашифрованный пароль
-                           )
-                           )
-            conn.commit()
-            print("Sharing successful!")
-            return RedirectResponse(url="/?success=shared", status_code=303)
+                INSERT INTO share (
+                    ownername, 
+                    sendername, 
+                    name, 
+                    username, 
+                    password
+                ) VALUES (?, ?, ?, ?, ?)
+            """, (
+                recipient[0],  # ID получателя
+                sender_username,  # Имя отправителя
+                name,  # Название сервиса
+                username,  # Логин для сервиса
+                function.encrypt(password)  # Шифруем пароль
+            ))
+            conn.commit()  # Важно: сохраняем изменения в БД!
 
-    except ValueError as ve:
-        print(f"Value error: {str(ve)}")
-        return RedirectResponse(url="/?error=invalid_request", status_code=303)
-    except Exception as e:
-        print(f"Critical error: {str(e)}")
-        return RedirectResponse(url="/?error=server_error", status_code=303)
+            print("Успешный шаринг")
+            return RedirectResponse(url="/", status_code=303)
 
+        else:
+            print("Неверный пароль")
+            return RedirectResponse(url="/", status_code=303)
+
+@app.get("/view", tags="Личный кабинет")
 async def view(request:Request):
     with sqlite3.connect("users.db") as conn:
         cursor = conn.cursor()
