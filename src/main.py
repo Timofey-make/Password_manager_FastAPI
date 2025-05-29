@@ -328,6 +328,33 @@ async def search(
 async def screamer(request: Request):
     return templates.TemplateResponse("screamer.html", {"request": request})
 
+@app.get("/settings", tags="Настроики")
+async def settings(request: Request):
+    username = function.decrypt(request.cookies.get("username"))
+    id = request.cookies.get("id")
+    if username and id:
+        return templates.TemplateResponse("settings.html", {"request": request, "username": username, "id": id})
+    return RedirectResponse(url="/login", status_code=303)
+
+@app.get("/panic_button", tags="Удалить все пароли")
+async def panic_button(request: Request):
+    return templates.TemplateResponse("panic_button.html", {"request": request})
+
+@app.post("/dopanic", tags="Удалить все пароли")
+async def dopanic(request: Request):
+    username = function.decrypt(request.cookies.get("username"))
+    id = request.cookies.get("id")
+    try:
+        with sqlite3.connect("users.db") as conn:
+            cursor = conn.cursor()
+            cursor.execute("DELETE FROM passwords WHERE user_id = ?",
+                           (id,))
+            cursor.execute("DELETE FROM share WHERE sendername = ?",
+                           (username,))
+            return RedirectResponse(url="/", status_code=303)
+    except:
+        print("Эх неповезло!")
+        return RedirectResponse(url="/", status_code=303)
 
 if __name__ == "__main__":
     init.init_db()

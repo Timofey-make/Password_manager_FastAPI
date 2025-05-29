@@ -1,0 +1,22 @@
+<!DOCTYPE html>
+<html lang="ru">
+<head>
+    <meta charset="UTF-8">
+    <title>Настройки</title>
+    <link rel="stylesheet" href="{{ url_for('static', path='/style.css') }}">
+</head>
+<body>
+  <h1>Информация об аккаунте</h1>
+  <p>Логин: {{ username }}</p>
+  <p>ID: {{ id }}</p>
+  <div class="side-links">
+    <a href="/">Главная</a>
+    <a href="/settings">Информация об аккаунте</a>
+    <a href="/panic_button"
+     class="action-btn delete-btn"
+     onclick="return confirm('Вы уверены что хотите удалить все пароли?')">
+      Удалить все пароли
+    </a>
+  </div>
+</body>
+</html>
