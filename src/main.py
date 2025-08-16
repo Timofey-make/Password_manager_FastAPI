@@ -3,6 +3,10 @@ from fastapi.responses import HTMLResponse, RedirectResponse
 from fastapi.staticfiles import StaticFiles
 from fastapi.templating import Jinja2Templates
 from urllib.parse import unquote
+
+from sqlalchemy.future import select
+from sqlalchemy.orm import Session
+
 import function
 import sqlite3
 import uvicorn
@@ -23,29 +27,29 @@ async def doregister(
     Password: str = Form(...),
 ):
     print(Login, Password)
-    with sqlite3.connect("users.db") as conn:
-        cursor = conn.cursor()
-        cursor.execute("SELECT * FROM users WHERE username = ?",
-                       (Login,))
-        if cursor.fetchone():
+    with Session(init.engine) as conn:
+        stmt = select(init.User).where(init.User.username == Login)
+        data = conn.execute(stmt).fetchall()
+        if data:
             error_msg = "Пользователь с таким именем уже есть"
-            return RedirectResponse(url="/register")
+            return RedirectResponse(url="/register", status_code=303)
         else:
-            cursor.execute("SELECT * FROM users ORDER BY id DESC LIMIT 1")
-            last_user = cursor.fetchone()
-
-            if last_user:
-                new_id = last_user[0] + 1
-            else:
-                new_id = 1
-            cursor.execute("INSERT INTO users (id, username, password) VALUES (?,?,?)",
-                           (new_id, Login, function.hash_password(Password)))
-            # Создаем редирект-ответ
-            redirect = RedirectResponse(url="/", status_code=303)
-            # Устанавливаем куки
-            redirect.set_cookie(key="id", value=str(new_id))
-            redirect.set_cookie(key="username", value=function.encrypt(Login))
-            return redirect
+            user = init.User(
+                username=Login,
+                password=function.hash_password(Password)
+            )
+            conn.add(user)
+            conn.commit()
+    conn = Session(init.engine)
+    stmt = select(init.User).where(init.User.username == Login)
+    id = conn.execute(stmt).fetchall()[0][0].id
+    conn.commit()
+    conn.close()
+    redirect = RedirectResponse(url="/", status_code=303)
+    # Устанавливаем куки
+    redirect.set_cookie(key="id", value=str(id))
+    redirect.set_cookie(key="username", value=function.encrypt(Login))
+    return redirect
 
 @app.get("/login", tags="Логин")
 async def login(request: Request):
@@ -357,5 +361,5 @@ async def dopanic(request: Request):
         return RedirectResponse(url="/", status_code=303)
 
 if __name__ == "__main__":
-    init.init_db()
+    init.Base.metadata.create_all(init.engine)
     uvicorn.run("main:app", reload=True)
