@@ -108,10 +108,7 @@ async def logout(request: Request):
 @app.get("/add", tags="Добавить пароль")
 async def add(request: Request):
     with sqlite3.connect("users.db") as conn:
-        cursor = conn.cursor()
-        cursor.execute("SELECT * FROM users WHERE id = ?",
-                       (request.cookies.get("id"),))
-        if cursor.fetchone():
+        if request.cookies.get("id"):
             return templates.TemplateResponse("add_note.html", {"request": request})
         else:
             return RedirectResponse(url="/login", status_code=303)
@@ -122,19 +119,24 @@ async def doadd(
     categories: str = Form(...),
     name: str = Form(...),
     username: str = Form(...),
-    password: str = Form(...)
-):
-    with sqlite3.connect("users.db") as conn:
-        cursor = conn.cursor()
-        cursor.execute("SELECT * FROM passwords WHERE name = ? AND username = ?",
-                       (name, username))
-        if cursor.fetchone():
+    password: str = Form(...)):
+    with Session(init.engine) as conn:
+        stmt = select(init.Password).where(
+            init.Password.user_id == request.cookies.get("id"), init.Password.name == name, init.Password.username == username)
+        data = conn.execute(stmt).fetchall()
+        if data:
             print("Такая запись уже есть")
             return RedirectResponse(url="/add", status_code=303)
-        else:
-            cursor.execute("INSERT INTO passwords (categories, user_id, name, username, password) VALUES (?,?,?,?,?)",
-                    (categories.lower(), request.cookies.get("id"), name, username, function.encrypt(password)))
-            return RedirectResponse(url="/", status_code=303)
+        password1 = init.Password(
+            categories=categories.lower(),
+            user_id=request.cookies.get("id"),
+            name=name,
+            username=username,
+            password=function.encrypt(password)
+        )
+        conn.add(password1)
+        conn.commit()
+        return RedirectResponse(url="/", status_code=303)
 
 @app.get("/delete", tags="Удалить пароль")
 async def delete_password(
