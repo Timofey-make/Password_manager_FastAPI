@@ -77,26 +77,24 @@ async def dologin(
 
 @app.get("/", tags="Личный кабинет")
 async def main(request: Request):
-    with sqlite3.connect("users.db") as conn:
-        cursor = conn.cursor()
-        cursor.execute("SELECT name, username, password FROM passwords WHERE user_id = ?",
-                       (request.cookies.get("id"),))
-        encrypted_notes = cursor.fetchall()
-
-        if request.cookies.get("id"):
-            notes = []
-            for note in encrypted_notes:
-                name, username, encrypted_password = note
-                try:
-                    decrypted_password = function.decrypt(encrypted_password)
-                except:
-                    decrypted_password = "Ошибка расшифровки"
-                notes.append((name, username, decrypted_password))
-        else:
+    with Session(init.engine) as conn:
+        user_id = request.cookies.get("id")
+        if not user_id:
             return RedirectResponse(url="/login", status_code=303)
+        stmt = select(init.Password.name, init.Password.username, init.Password.password).where(
+            init.Password.user_id == user_id
+        )
+        encrypted_notes = conn.execute(stmt).fetchall()
 
+        notes = []
+        for note in encrypted_notes:
+            name, username, encrypted_password = note
+            try:
+                decrypted_password = function.decrypt(encrypted_password)
+            except:
+                decrypted_password = "Ошибка расшифровки"
+            notes.append((name, username, decrypted_password))
     return templates.TemplateResponse("main.html", {"request": request, "username":function.decrypt(request.cookies.get("username")), "notes":notes})
-    # return {"id":request.cookies.get("id"), "username":function.decrypt(request.cookies.get("username"))}
 
 @app.get("/logout", tags="Выход")
 async def logout(request: Request):
@@ -126,7 +124,6 @@ async def doadd(
     username: str = Form(...),
     password: str = Form(...)
 ):
-    print(categories)
     with sqlite3.connect("users.db") as conn:
         cursor = conn.cursor()
         cursor.execute("SELECT * FROM passwords WHERE name = ? AND username = ?",
