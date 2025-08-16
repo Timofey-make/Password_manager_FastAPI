@@ -4,9 +4,9 @@ from fastapi.staticfiles import StaticFiles
 from fastapi.templating import Jinja2Templates
 from urllib.parse import unquote
 
+from requests import session
 from sqlalchemy.future import select
 from sqlalchemy.orm import Session
-
 import function
 import sqlite3
 import uvicorn
@@ -61,20 +61,15 @@ async def dologin(
     Login: str = Form(...),
     Password: str = Form(...)
 ):
-    with sqlite3.connect("users.db") as conn:
-        cursor = conn.cursor()
-        cursor.execute("SELECT id, username FROM users WHERE username = ? AND password = ?",
-                       (Login, function.hash_password(Password)))
-        user = cursor.fetchone()
-
-        if user:
-            # session['id'] = user[0]
-            # session['username'] = user[1]
+    with Session(init.engine) as conn:
+        stmt = select(init.User).where(init.User.username == Login)
+        data = conn.execute(stmt).fetchall()
+        if data and data[0][0].password == function.hash_password(Password):
             # Создаем редирект-ответ
             redirect = RedirectResponse(url="/", status_code=303)
             # Устанавливаем куки
-            redirect.set_cookie(key="id", value=str(user[0]))
-            redirect.set_cookie(key="username", value=function.encrypt(user[1]))
+            redirect.set_cookie(key="id", value=str(data[0][0].id))
+            redirect.set_cookie(key="username", value=function.encrypt(data[0][0].username))
             return redirect
         else:
             print("Неверный логин или пароль")
