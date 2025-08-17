@@ -174,11 +174,18 @@ async def delete_share(
     name: str = Form(...),
     username: str = Form(...)
 ):
-    print(sendername, name, username)
-    with sqlite3.connect("users.db") as conn:
-        cursor = conn.cursor()
-        cursor.execute("DELETE FROM share WHERE ownername = ? AND sendername = ? AND name = ? AND username = ?",
-                       (request.cookies.get("id"), sendername, name, username))
+    with Session(init.engine) as conn:
+        to_delete = conn.execute(
+            select(init.Share).where(
+                (init.Share.ownername == request.cookies.get("id")) &
+                (init.Share.sendername == sendername) &
+                (init.Share.name == name) &
+                (init.Share.username == username)
+            )
+        ).scalars().all()
+        for item in to_delete:
+            conn.delete(item)
+        conn.commit()
     return RedirectResponse(url="/view", status_code=303)
 
 @app.get("/change", tags="Изменить пароль")
