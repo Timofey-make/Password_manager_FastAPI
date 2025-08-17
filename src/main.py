@@ -136,6 +136,7 @@ async def doadd(
         )
         conn.add(password1)
         conn.commit()
+
         return RedirectResponse(url="/", status_code=303)
 
 @app.get("/delete", tags="Удалить пароль")
@@ -144,13 +145,26 @@ async def delete_password(
     username: str,
     request: Request,
 ):
-    print(name, username)
-    with sqlite3.connect("users.db") as conn:
-        cursor = conn.cursor()
-        cursor.execute("DELETE FROM passwords WHERE name = ? AND username = ?",
-                       (name, username))
-        cursor.execute("DELETE FROM share WHERE sendername = ? AND name = ? AND username = ?",
-                       (function.decrypt(request.cookies.get("username")), name, username))
+    with Session(init.engine) as conn:
+        to_delete = conn.execute(
+            select(init.Password).where(
+                (init.Password.user_id == request.cookies.get("id")) &
+                (init.Password.name == name) &
+                (init.Password.username == username)
+            )
+        ).scalars().all()
+        to_delete2 = conn.execute(
+            select(init.Share).where(
+                (init.Share.sendername == function.decrypt(request.cookies.get("username"))) &
+                (init.Share.name == name) &
+                (init.Share.username == username)
+            )
+        ).scalars().all()
+        for item in to_delete:
+            conn.delete(item)
+        for item in to_delete2:
+            conn.delete(item)
+        conn.commit()
     return RedirectResponse(url="/", status_code=303)
 
 @app.post("/delete-share", tags="Удалить пароль")
