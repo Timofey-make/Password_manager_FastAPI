@@ -7,6 +7,8 @@ from urllib.parse import unquote
 from requests import session
 from sqlalchemy.future import select
 from sqlalchemy.orm import Session
+from sqlalchemy import update
+
 import function
 import sqlite3
 import uvicorn
@@ -107,11 +109,10 @@ async def logout(request: Request):
 
 @app.get("/add", tags="Добавить пароль")
 async def add(request: Request):
-    with sqlite3.connect("users.db") as conn:
-        if request.cookies.get("id"):
-            return templates.TemplateResponse("add_note.html", {"request": request})
-        else:
-            return RedirectResponse(url="/login", status_code=303)
+    if request.cookies.get("id"):
+        return templates.TemplateResponse("add_note.html", {"request": request})
+    else:
+        return RedirectResponse(url="/login", status_code=303)
 
 @app.post("/doadd", tags="Добавить пароль")
 async def doadd(
@@ -190,26 +191,29 @@ async def delete_share(
 
 @app.get("/change", tags="Изменить пароль")
 async def change(request: Request):
-    with sqlite3.connect("users.db") as conn:
-        cursor = conn.cursor()
-        cursor.execute("SELECT * FROM users WHERE id = ?",
-                       (request.cookies.get("id"),))
-        if cursor.fetchone():
-            return templates.TemplateResponse("change-password.html", {"request": request})
-        else:
-            return RedirectResponse(url="/login", status_code=303)
+    if request.cookies.get("id"):
+        return templates.TemplateResponse("change-password.html", {"request": request})
+    else:
+        return RedirectResponse(url="/login", status_code=303)
 
 @app.post("/dochange", tags="Изменить пароль")
 async def dochange(
     request: Request,
     name: str = Form(...),
     username: str = Form(...),
-    password: str = Form(...)
-):
-    with sqlite3.connect("users.db") as conn:
-        cursor = conn.cursor()
-        cursor.execute("""UPDATE passwords SET password = ?WHERE name = ? AND username = ?""",
-                       (function.encrypt(password), name, username))
+    password: str = Form(...)):
+    with Session(init.engine) as conn:
+        stmt = (
+            update(init.Password)
+            .where((init.Password.name == name) & (init.Password.username == username))
+            .values(password=function.encrypt(password))
+        )
+        conn.execute(stmt)
+        conn.commit()
+    # with sqlite3.connect("users.db") as conn:
+    #     cursor = conn.cursor()
+    #     cursor.execute("""UPDATE passwords SET password = ?WHERE name = ? AND username = ?""",
+    #                    (function.encrypt(password), name, username))
     return RedirectResponse(url="/", status_code=303)
 
 @app.get("/share", tags=["Шэйринг паролей"])
